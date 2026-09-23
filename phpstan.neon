@@ -1,0 +1,25 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # Level 1 passes with nothing ignored and no baseline: every finding was
+    # fixed rather than silenced. Two of them were real defects — routes
+    # pointing at controllers that no longer existed, and an image resource
+    # reading a column by the wrong name.
+    #
+    # Level 2 reports 60 more, nearly all of one kind: a query returns a plain
+    # Eloquent\Model and the caller reaches for ->id. Clearing those means
+    # narrowing the type at each call site, which belongs in small steps behind
+    # tests rather than one sweep.
+    level: 1
+
+    paths:
+        - app
+        - database
+        - routes
+        - tests
+
+    # Migrations describe a schema; analysing them says nothing about the code
+    # that runs every day.
+    excludePaths:
+        - database/migrations
