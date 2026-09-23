@@ -1,0 +1,84 @@
+# Formatting, static analysis and tests on both halves of the project.
+# These are the same commands that have to pass before a deployment.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, gd, bcmath, intl, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Prepare the environment
+        # The tests run on SQLite, so the database is the only file to create.
+        # The console is built because several feature tests render a view that
+        # asks for the Vite manifest, and without it they fail for a reason that
+        # has nothing to do with what they are testing.
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          touch database/testing.sqlite
+          npm ci
+          npm run build
+
+      - name: Check formatting
+        run: vendor/bin/pint --test
+
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Tests
+        run: php artisan test
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run format:check
+
+      - run: npm run lint
+
+      - run: npx vitest run
+
+      - name: Build
+        # A type or import error must stop the pipeline, not the browser.
+        run: npm run build
